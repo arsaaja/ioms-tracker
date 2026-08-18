@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SOW Milestone Tracker - NOC Dashboard</title>
+    <!-- Tambahkan CDN FontAwesome untuk Icon SVG -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <header class="app-header">
+      <!-- Mengganti emoticon dengan icon satelit/tower -->
+      <h1><i class="fas fa-satellite-dish"></i> SOW Milestone Tracker</h1>
+      <p>Telco Site Rollout Dashboard</p>
+    </header>
+
+    <div class="container">
+      <!-- Panel Pencarian -->
+      <div class="panel card">
+        <h2><i class="fas fa-search"></i> Search & Tracker</h2>
+        <p>
+          Masukkan satu atau banyak SOW ID (pisahkan dengan spasi/enter/koma)
+          untuk mengecek status Milestone.
+        </p>
+        <textarea
+          id="searchInput"
+          rows="3"
+          placeholder="Contoh: SOW-1001, SOW-1002..."
+        ></textarea>
+        <button onclick="executeSearch()" class="btn-primary">
+          Track SOW Status
+        </button>
+
+        <div id="searchResults" class="results-container"></div>
+      </div>
+
+      <hr />
+
+      <!-- Panel Update Data -->
+      <div class="panel-group">
+        <div class="panel card">
+          <h2>
+            <i class="fas fa-file-upload"></i> Update Massal (Upload Excel)
+          </h2>
+          <p>
+            Upload file raw Excel dari sistem. Sistem hanya akan mengisi kolom
+            tanggal yang kosong.
+          </p>
+          <input type="file" id="excelFile" accept=".xlsx, .xls" />
+          <button onclick="uploadExcel()" class="btn-secondary">
+            Proses Excel
+          </button>
+        </div>
+
+        <div class="panel card">
+          <h2>
+            <i class="fas fa-clipboard-list"></i> Update Manual (Copy-Paste)
+          </h2>
+          <p>Paste langsung dari Excel beserta baris headernya.</p>
+          <textarea
+            id="manualInput"
+            rows="5"
+            placeholder="SOW ID [tab] Infra Vendor [tab] MOS Date..."
+          ></textarea>
+          <button onclick="submitManualInput()" class="btn-secondary">
+            Proses Data
+          </button>
+        </div>
+      </div>
+
+      <!-- Log Proses Update -->
+      <div id="updateLog" class="log-container" style="display: none">
+        <h3><i class="fas fa-history"></i> Update Summary</h3>
+        <div id="summaryStats"></div>
+        <textarea id="logDetails" rows="6" readonly></textarea>
+      </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>

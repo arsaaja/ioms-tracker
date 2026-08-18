@@ -1,0 +1,165 @@
+// --- FITUR PENCARIAN & TRACKING ---
+async function executeSearch() {
+  const inputIds = document.getElementById("searchInput").value;
+  const resultsDiv = document.getElementById("searchResults");
+
+  if (!inputIds.trim()) {
+    alert("Masukkan minimal 1 SOW ID");
+    return;
+  }
+
+  resultsDiv.innerHTML =
+    '<p class="loading"><i class="fas fa-spinner fa-spin"></i> Memuat data dari database...</p>';
+
+  try {
+    const response = await fetch("/api/bulk_search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sow_ids: inputIds }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      resultsDiv.innerHTML = `<p class="error"><i class="fas fa-exclamation-triangle"></i> ${result.error}</p>`;
+      return;
+    }
+
+    renderSearchResults(result, resultsDiv);
+  } catch (error) {
+    console.error("Error:", error);
+    resultsDiv.innerHTML =
+      '<p class="error"><i class="fas fa-times-circle"></i> Gagal melakukan pencarian server.</p>';
+  }
+}
+
+function renderSearchResults(result, container) {
+  let html = `<div class="summary-box">
+        <strong>Hasil:</strong> ${result.total_found} ditemukan | ${result.total_not_found} tidak ditemukan.
+    </div>`;
+
+  if (result.not_found_list.length > 0) {
+    // Ganti ❌ dengan icon warning
+    html += `<p class="warning"><i class="fas fa-exclamation-triangle"></i> Tidak ada di DB: ${result.not_found_list.join(", ")}</p>`;
+  }
+
+  if (result.total_found > 0) {
+    html += `<div class="table-responsive"><table class="milestone-table">
+            <thead>
+                <tr>
+                    <th>SOW ID</th>
+                    ${result.milestones.map((m) => `<th>${m.replace(" Date", "")}</th>`).join("")}
+                </tr>
+            </thead>
+            <tbody>`;
+
+    result.data.forEach((item) => {
+      const sowId = item.sow_id;
+      const mData = item.milestones;
+
+      html += `<tr><td class="sticky-col">${sowId}</td>`;
+
+      result.milestones.forEach((m) => {
+        const dateVal = mData[m];
+        if (dateVal && dateVal !== "None" && dateVal !== "null") {
+          html += `<td class="dot-cell"><span class="dot filled" title="${dateVal}">●</span></td>`;
+        } else {
+          html += `<td class="dot-cell"><span class="dot empty" title="Belum update">○</span></td>`;
+        }
+      });
+      html += `</tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+// --- FITUR UPDATE & UPSERT ---
+async function uploadExcel() {
+  const fileInput = document.getElementById("excelFile");
+  if (fileInput.files.length === 0) {
+    alert("Pilih file excel terlebih dahulu!");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+
+  showLogContainer("Memproses file Excel...");
+
+  try {
+    const response = await fetch("/api/upload_excel", {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json();
+    renderUpdateLog(result);
+  } catch (error) {
+    document.getElementById("summaryStats").innerHTML =
+      `<p class="error"><i class="fas fa-times-circle"></i> Error upload: ${error}</p>`;
+  }
+}
+
+async function submitManualInput() {
+  const textData = document.getElementById("manualInput").value;
+  if (!textData.trim()) {
+    alert("Paste data dari excel terlebih dahulu!");
+    return;
+  }
+
+  showLogContainer("Memproses teks input...");
+
+  try {
+    const response = await fetch("/api/input_manual", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text_data: textData }),
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      document.getElementById("summaryStats").innerHTML =
+        `<p class="error"><i class="fas fa-exclamation-circle"></i> ${result.error}</p>`;
+      return;
+    }
+
+    renderUpdateLog(result);
+  } catch (error) {
+    document.getElementById("summaryStats").innerHTML =
+      `<p class="error"><i class="fas fa-times-circle"></i> Error input manual: ${error}</p>`;
+  }
+}
+
+// --- HELPER UI ---
+function showLogContainer(msg) {
+  const logContainer = document.getElementById("updateLog");
+  logContainer.style.display = "block";
+  document.getElementById("summaryStats").innerHTML =
+    `<p class="loading"><i class="fas fa-spinner fa-spin"></i> ${msg}</p>`;
+  document.getElementById("logDetails").value = "";
+}
+
+function renderUpdateLog(result) {
+  if (result.error) {
+    document.getElementById("summaryStats").innerHTML =
+      `<p class="error"><i class="fas fa-times-circle"></i> ${result.error}</p>`;
+    return;
+  }
+
+  const s = result.summary;
+
+  document.getElementById("summaryStats").innerHTML = `
+        <p>
+            <i class="fas fa-check-circle" style="color: #2ea043;"></i> <strong>Insert baru:</strong> ${s.inserted} | 
+            <i class="fas fa-sync-alt" style="color: #3b82f6;"></i> <strong>Update milestone:</strong> ${s.updated} | 
+            <i class="fas fa-forward" style="color: #8b949e;"></i> <strong>Dilewati (sudah terisi/kosong):</strong> ${s.unchanged}
+        </p>
+    `;
+
+  document.getElementById("logDetails").value =
+    result.logs.length > 0
+      ? result.logs.join("\n")
+      : "Tidak ada data baru yang di-update ke database.";
+}
