@@ -17,7 +17,7 @@ IOMS Tracker adalah aplikasi web-based dashboard untuk memonitoring dan mengelol
 
 ```bash
 # Clone repository
-git clone [https://github.com/UsernameAnda/ioms-tracker.git](https://github.com/UsernameAnda/ioms-tracker.git)
+git clone [https://github.com/arsaaja/ioms-tracker.git](https://github.com/arsaaja/ioms-tracker.git)
 cd ioms-tracker
 
 # Setup Virtual Environment (Windows)
