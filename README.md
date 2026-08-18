@@ -1,4 +1,4 @@
-# SOW Milestone Tracker
+# IOMS Milestone Tracker
 
 Web app kecil buat search & update status 11 milestone (MOS, INSTALL, CONNECTED,
 OA, QC, BAUTEQP, BASOEQP, BAPAEQP, SOAC, BAST, ATP) berdasarkan **Project SOW ID**.
