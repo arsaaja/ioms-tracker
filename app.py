@@ -3,6 +3,12 @@ import sqlite3
 import re
 import pandas as pd
 from flask import Flask, render_template, request, jsonify
+from flask import send_file
+import tempfile
+import subprocess
+import os
+from io import BytesIO
+import zipfile
 
 app = Flask(__name__)
 DB_FILE = 'sow_tracker.db'
@@ -230,6 +236,134 @@ def input_manual():
 
     summary, logs = upsert_sow_data(data_list)
     return jsonify({'summary': summary, 'logs': logs})
+
+# ==========================================
+# FITUR PIVOT 1: GENERATE PREVIEW (JSON)
+# ==========================================
+@app.route('/api/preview-pivot', methods=['POST'])
+def api_preview_pivot():
+    if 'files' not in request.files:
+        return jsonify({'error': 'Mana file Excelnya?'}), 400
+    
+    files = request.files.getlist('files')
+    sowid_input = request.form.get('sowids', '')
+    
+    try:
+        df_list = [pd.read_excel(file) for file in files]
+        df_all = pd.concat(df_list, ignore_index=True)
+        sowid_list = [x.strip() for x in sowid_input.replace('\n', ',').split(',') if x.strip()]
+        df_target = df_all[df_all['Project SOW ID'].isin(sowid_list)].copy()
+        
+        if df_target.empty:
+            return jsonify({'error': 'SOWID lu kagak nemu di file Excel mana pun.'}), 404
+            
+        milestones = ['MOS Date', 'INSTALL Date', 'CONNECTED Date', 'OA Date', 'QC Date', 'BAUTEQP Date', 'BASOEQP Date', 'BAPAEQP Date', 'SOAC Date', 'BAST Date', 'ATP']
+        report_data = []
+        for _, row in df_target.iterrows():
+            for col in milestones:
+                if col in df_target.columns:
+                    status = "Done" if pd.notna(row[col]) else "Pending"
+                    report_data.append({"Project SOW ID": row['Project SOW ID'], "Milestone": col, "Status": status})
+                    
+        # Bikin pivot dan reset_index biar SOW ID jadi kolom biasa (gampang di-JSON-in)
+        pivot_report = pd.DataFrame(report_data).pivot_table(index="Project SOW ID", columns="Milestone", values="Status", aggfunc='first').reset_index()
+        
+        # Rapihin urutan kolom
+        available_cols = ["Project SOW ID"] + [c for c in milestones if c in pivot_report.columns]
+        pivot_report = pivot_report[available_cols].fillna("Pending")
+        
+        # Balikin data berupa JSON buat di-render Frontend
+        return jsonify({
+            "columns": available_cols,
+            "data": pivot_report.to_dict(orient="records")
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==========================================
+# FITUR PIVOT 2: DOWNLOAD EXCEL
+# ==========================================
+@app.route('/api/download-pivot', methods=['POST'])
+def api_download_pivot():
+    # Sama kayak preview, tapi outputnya dilempar ke tempfile Excel
+    files = request.files.getlist('files')
+    sowid_input = request.form.get('sowids', '')
+    
+    try:
+        df_list = [pd.read_excel(file) for file in files]
+        df_all = pd.concat(df_list, ignore_index=True)
+        sowid_list = [x.strip() for x in sowid_input.replace('\n', ',').split(',') if x.strip()]
+        df_target = df_all[df_all['Project SOW ID'].isin(sowid_list)].copy()
+        
+        milestones = ['MOS Date', 'INSTALL Date', 'CONNECTED Date', 'OA Date', 'QC Date', 'BAUTEQP Date', 'BASOEQP Date', 'BAPAEQP Date', 'SOAC Date', 'BAST Date', 'ATP']
+        report_data = []
+        for _, row in df_target.iterrows():
+            for col in milestones:
+                if col in df_target.columns:
+                    status = "Done" if pd.notna(row[col]) else "Pending"
+                    report_data.append({"Project SOW ID": row['Project SOW ID'], "Milestone": col, "Status": status})
+                    
+        pivot_report = pd.DataFrame(report_data).pivot_table(index="Project SOW ID", columns="Milestone", values="Status", aggfunc='first')
+        available_cols = [c for c in milestones if c in pivot_report.columns]
+        pivot_report = pivot_report[available_cols]
+        
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+        pivot_report.to_excel(temp_file.name)
+        temp_file.close()
+        
+        return send_file(temp_file.name, as_attachment=True, download_name="Report_IOMS_Pivot.xlsx")
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+# ==========================================
+# FITUR TAMBAHAN: COMPRESS PDF (BULK)
+# ==========================================
+@app.route('/api/compress-pdf', methods=['POST'])
+def api_compress_pdf():
+    if 'files' not in request.files:
+        return jsonify({'error': 'Upload PDF-nya dulu bos!'}), 400
+        
+    files = request.files.getlist('files')
+    quality = request.form.get('quality', '/ebook')
+    
+    try:
+        if len(files) == 1:
+            file = files[0]
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_in:
+                file.save(temp_in.name)
+                input_path = temp_in.name
+                
+            output_path = input_path.replace(".pdf", "_compressed.pdf")
+            gs_cmd = [
+                "gswin64c", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
+                f"-dPDFSETTINGS={quality}", "-dNOPAUSE", "-dQUIET", "-dBATCH",
+                f"-sOutputFile={output_path}", input_path
+            ]
+            subprocess.run(gs_cmd, check=True)
+            return send_file(output_path, as_attachment=True, download_name=f"compressed_{file.filename}")
+            
+        else:
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for file in files:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_in:
+                        file.save(temp_in.name)
+                        input_path = temp_in.name
+                        
+                    output_path = input_path.replace(".pdf", "_compressed.pdf")
+                    gs_cmd = [
+                        "gswin64c", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
+                        f"-dPDFSETTINGS={quality}", "-dNOPAUSE", "-dQUIET", "-dBATCH",
+                        f"-sOutputFile={output_path}", input_path
+                    ]
+                    subprocess.run(gs_cmd, check=True)
+                    zip_file.write(output_path, arcname=f"compressed_{file.filename}")
+                    os.remove(input_path)
+                    os.remove(output_path)
+                    
+            zip_buffer.seek(0)
+            return send_file(zip_buffer, as_attachment=True, download_name="Hasil_Compress_Bulk.zip", mimetype="application/zip")
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     # Paksa inisialisasi database setiap kali server nyala.

@@ -3,8 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SOW Milestone Tracker - NOC Dashboard</title>
-    <!-- Tambahkan CDN FontAwesome untuk Icon SVG -->
+    <title>Internal Tools - Telkominfra</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
@@ -16,70 +15,156 @@
   </head>
   <body>
     <header class="app-header">
-      <!-- Mengganti emoticon dengan icon satelit/tower -->
-      <h1><i class="fas fa-satellite-dish"></i> SOW Milestone Tracker</h1>
-      <p>Telco Site Rollout Dashboard</p>
+      <h1><i class="fas fa-satellite-dish"></i>Telkominfra Helper Web</h1>
+      <p>Pivot Report & PDF Compressor</p>
     </header>
 
+    <!-- NAVBAR MULAI DI SINI -->
+    <nav class="navbar">
+      <div
+        class="nav-item active"
+        id="nav-tracker"
+        onclick="switchTab('tracker')"
+      >
+        <i class="fas fa-search"></i> SOW Tracker
+      </div>
+      <div class="nav-item" id="nav-pivot" onclick="switchTab('pivot')">
+        <i class="fas fa-file-excel"></i> Generate Pivot
+      </div>
+      <div class="nav-item" id="nav-compress" onclick="switchTab('compress')">
+        <i class="fas fa-file-pdf"></i> PDF Compressor
+      </div>
+    </nav>
+
     <div class="container">
-      <!-- Panel Pencarian -->
-      <div class="panel card">
-        <h2><i class="fas fa-search"></i> Search & Tracker</h2>
-        <p>
-          Masukkan satu atau banyak SOW ID (pisahkan dengan spasi/enter/koma)
-          untuk mengecek status Milestone.
-        </p>
-        <textarea
-          id="searchInput"
-          rows="3"
-          placeholder="Contoh: SOW-1001, SOW-1002..."
-        ></textarea>
-        <button onclick="executeSearch()" class="btn-primary">
-          Track SOW Status
-        </button>
-
-        <div id="searchResults" class="results-container"></div>
-      </div>
-
-      <hr />
-
-      <!-- Panel Update Data -->
-      <div class="panel-group">
+      <!-- ========================================== -->
+      <!-- HALAMAN 1: TRACKER SOW                     -->
+      <!-- ========================================== -->
+      <div id="view-tracker" class="view-section">
         <div class="panel card">
-          <h2>
-            <i class="fas fa-file-upload"></i> Update Massal (Upload Excel)
-          </h2>
+          <h2><i class="fas fa-search"></i> Search & Tracker</h2>
           <p>
-            Upload file raw Excel dari sistem. Sistem hanya akan mengisi kolom
-            tanggal yang kosong.
+            Masukkan satu atau banyak SOW ID (pisahkan dengan spasi/enter/koma).
           </p>
-          <input type="file" id="excelFile" accept=".xlsx, .xls" />
-          <button onclick="uploadExcel()" class="btn-secondary">
-            Proses Excel
+          <textarea
+            id="searchInput"
+            rows="3"
+            placeholder="Contoh: SOW-1001, SOW-1002..."
+          ></textarea>
+          <button onclick="executeSearch()" class="btn-primary">
+            Track SOW Status
           </button>
+          <div id="searchResults" class="results-container"></div>
         </div>
 
-        <div class="panel card">
-          <h2>
-            <i class="fas fa-clipboard-list"></i> Update Manual (Copy-Paste)
-          </h2>
-          <p>Paste langsung dari Excel beserta baris headernya.</p>
-          <textarea
-            id="manualInput"
-            rows="5"
-            placeholder="SOW ID [tab] Infra Vendor [tab] MOS Date..."
-          ></textarea>
-          <button onclick="submitManualInput()" class="btn-secondary">
-            Proses Data
-          </button>
+        <div class="panel-group">
+          <div class="panel card">
+            <h2>
+              <i class="fas fa-file-upload"></i> Update Massal (Upload Excel)
+            </h2>
+            <p>
+              Upload file raw Excel dari sistem. Sistem hanya mengisi tanggal
+              kosong.
+            </p>
+            <input type="file" id="excelFile" accept=".xlsx, .xls" />
+            <button onclick="uploadExcel()" class="btn-secondary">
+              Proses Excel
+            </button>
+          </div>
+
+          <div class="panel card">
+            <h2>
+              <i class="fas fa-clipboard-list"></i> Update Manual (Copy-Paste)
+            </h2>
+            <p>Paste langsung dari Excel beserta baris headernya.</p>
+            <textarea
+              id="manualInput"
+              rows="5"
+              placeholder="SOW ID [tab] Infra Vendor [tab] MOS Date..."
+            ></textarea>
+            <button onclick="submitManualInput()" class="btn-secondary">
+              Proses Data
+            </button>
+          </div>
+        </div>
+
+        <div id="updateLog" class="log-container" style="display: none">
+          <h3><i class="fas fa-history"></i> Update Summary</h3>
+          <div id="summaryStats"></div>
+          <textarea id="logDetails" rows="6" readonly></textarea>
         </div>
       </div>
 
-      <!-- Log Proses Update -->
-      <div id="updateLog" class="log-container" style="display: none">
-        <h3><i class="fas fa-history"></i> Update Summary</h3>
-        <div id="summaryStats"></div>
-        <textarea id="logDetails" rows="6" readonly></textarea>
+      <!-- ========================================== -->
+      <!-- HALAMAN 2: PIVOT GENERATOR                 -->
+      <!-- ========================================== -->
+      <div id="view-pivot" class="view-section">
+        <div class="panel card" style="max-width: 900px; margin: 0 auto;">
+          <h2><i class="fas fa-file-excel"></i> Generate Pivot IOMS</h2>
+          <hr>
+          <label>Upload Excel Mentahan (Bisa Bulk):</label>
+          <input type="file" id="pivotExcel" accept=".xlsx, .xls" multiple />
+          
+          <label>Paste List SOW ID (Bisa Koma / Enter):</label>
+          <textarea id="pivotSowids" rows="4" placeholder="SOW-01, SOW-02..."></textarea>
+          
+          <button id="btnPreview" onclick="previewPivot()" class="btn-primary" style="width: 100%;">
+            <i class="fas fa-table"></i> Generate Preview
+          </button>
+
+          <!-- Tempat nongolnya tabel preview -->
+          <div id="pivotPreviewContainer" style="display: none; margin-top: 25px;">
+            <h3 style="margin-bottom: 10px; color: var(--teal-accent);"><i class="fas fa-eye"></i> Preview Data</h3>
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+              <table class="milestone-table" id="pivotTableResult">
+                <!-- Tabel di-inject via JS di sini -->
+              </table>
+            </div>
+            
+            <button onclick="downloadPivot()" class="btn-secondary" style="width: 100%; margin-top: 20px; border-color: #2ea043; color: #2ea043;">
+              <i class="fas fa-download"></i> Download Hasil Excel
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- HALAMAN 3: PDF COMPRESSOR                  -->
+      <!-- ========================================== -->
+      <div id="view-compress" class="view-section">
+        <div class="panel card" style="max-width: 800px; margin: 0 auto">
+          <h2><i class="fas fa-file-pdf"></i> Secure PDF Compressor</h2>
+          <hr />
+          <label>Upload Dokumen PDF (Bisa Bulk/Multiple).</label>
+          <input type="file" id="pdfFiles" accept=".pdf" multiple />
+
+          <label>Kualitas Kompresi:</label>
+          <select
+            id="pdfQuality"
+            style="
+              width: 100%;
+              padding: 12px;
+              margin-bottom: 15px;
+              background-color: #010409;
+              color: #c9d1d9;
+              border: 1px solid #30363d;
+              border-radius: 6px;
+            "
+          >
+            <option value="/screen">Low</option>
+            <option value="/ebook" selected>Medium(Recommended)</option>
+            <option value="/printer">High</option>
+          </select>
+
+          <button
+            id="btnCompress"
+            onclick="compressPdf()"
+            class="btn-primary"
+            style="width: 100%"
+          >
+            <i class="fas fa-compress-alt"></i> Compress
+          </button>
+        </div>
       </div>
     </div>
 

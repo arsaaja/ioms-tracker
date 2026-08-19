@@ -1,3 +1,25 @@
+// --- FITUR NAVBAR / TABS ---
+function switchTab(tabId) {
+  // Sembunyiin semua section
+  document.querySelectorAll(".view-section").forEach((el) => {
+    el.style.display = "none";
+  });
+
+  // Matiin highlight di semua tombol navbar
+  document.querySelectorAll(".nav-item").forEach((el) => {
+    el.classList.remove("active");
+  });
+
+  // Nyalain section dan highlight tombol yang dipilih
+  document.getElementById("view-" + tabId).style.display = "block";
+  document.getElementById("nav-" + tabId).classList.add("active");
+}
+
+// Pastikan tab default (Tracker) nyala pas web pertama kali diload
+window.onload = () => {
+  switchTab("tracker");
+};
+
 // --- FITUR PENCARIAN & TRACKING ---
 async function executeSearch() {
   const inputIds = document.getElementById("searchInput").value;
@@ -162,4 +184,134 @@ function renderUpdateLog(result) {
     result.logs.length > 0
       ? result.logs.join("\n")
       : "Tidak ada data baru yang di-update ke database.";
+}
+
+// --- FITUR TAMBAHAN: PIVOT PREVIEW & DOWNLOAD ---
+async function previewPivot() {
+    const fileInput = document.getElementById("pivotExcel");
+    const sowInput = document.getElementById("pivotSowids").value;
+    
+    if (fileInput.files.length === 0 || !sowInput.trim()) {
+        alert("File Excel sama SOW ID wajib diisi bos!"); return;
+    }
+    
+    const formData = new FormData();
+    for (let i = 0; i < fileInput.files.length; i++) {
+        formData.append("files", fileInput.files[i]);
+    }
+    formData.append("sowids", sowInput);
+    
+    const btn = document.getElementById("btnPreview");
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    
+    try {
+        const response = await fetch("/api/preview-pivot", { method: "POST", body: formData });
+        const result = await response.json();
+        
+        if (!response.ok) throw new Error(result.error);
+        
+        // Render tabel HTML pakai data JSON dari Flask
+        let tableHtml = `<thead><tr>`;
+        result.columns.forEach(col => {
+            tableHtml += `<th>${col.replace(" Date", "")}</th>`;
+        });
+        tableHtml += `</tr></thead><tbody>`;
+        
+        result.data.forEach(row => {
+            tableHtml += `<tr>`;
+            result.columns.forEach((col, index) => {
+                let val = row[col];
+                // Styling biar kece, kalau Project SOW ID di-bold, Done dikasih dot ijo
+                if (index === 0) {
+                    tableHtml += `<td class="sticky-col">${val}</td>`;
+                } else if (val === "Done") {
+                    tableHtml += `<td class="dot-cell"><span class="dot filled">●</span></td>`;
+                } else {
+                    tableHtml += `<td class="dot-cell"><span class="dot empty">○</span></td>`;
+                }
+            });
+            tableHtml += `</tr>`;
+        });
+        tableHtml += `</tbody>`;
+        
+        document.getElementById("pivotTableResult").innerHTML = tableHtml;
+        document.getElementById("pivotPreviewContainer").style.display = "block";
+        
+    } catch (error) {
+        alert("Waduh error: " + error.message);
+        document.getElementById("pivotPreviewContainer").style.display = "none";
+    } finally {
+        btn.innerHTML = '<i class="fas fa-table"></i> Generate Preview';
+    }
+}
+
+async function downloadPivot() {
+    const fileInput = document.getElementById("pivotExcel");
+    const sowInput = document.getElementById("pivotSowids").value;
+    
+    const formData = new FormData();
+    for (let i = 0; i < fileInput.files.length; i++) {
+        formData.append("files", fileInput.files[i]);
+    }
+    formData.append("sowids", sowInput);
+    
+    try {
+        const response = await fetch("/api/download-pivot", { method: "POST", body: formData });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error);
+        }
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "Report_IOMS_Pivot.xlsx";
+        a.click();
+    } catch (error) {
+        alert("Gagal download pivot: " + error.message);
+    }
+}
+
+async function compressPdf() {
+  const fileInput = document.getElementById("pdfFiles");
+  const quality = document.getElementById("pdfQuality").value;
+
+  if (fileInput.files.length === 0) {
+    alert("Upload PDF-nya dulu!");
+    return;
+  }
+
+  const formData = new FormData();
+  for (let i = 0; i < fileInput.files.length; i++) {
+    formData.append("files", fileInput.files[i]);
+  }
+  formData.append("quality", quality);
+
+  const btn = document.getElementById("btnCompress");
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lagi dipress...';
+  btn.disabled = true;
+
+  try {
+    const response = await fetch("/api/compress-pdf", {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) throw new Error(await response.text());
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download =
+      fileInput.files.length > 1
+        ? "Hasil_Compress_Bulk.zip"
+        : "compressed_file.pdf";
+    a.click();
+  } catch (error) {
+    alert("Gagal compress: " + error.message);
+  } finally {
+    btn.innerHTML = "🗜️ Gas Compress";
+    btn.disabled = false;
+  }
 }

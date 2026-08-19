@@ -42,6 +42,45 @@ body {
   color: #8b949e;
   font-size: 0.95rem;
 }
+/* --- NAVBAR / TAB MENU --- */
+.navbar {
+  background-color: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 10px;
+  padding: 0 30px;
+}
+
+.nav-item {
+  padding: 15px 20px;
+  color: #8b949e;
+  text-decoration: none;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.nav-item:hover {
+  color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item.active {
+  color: var(--teal-accent);
+  border-bottom: 3px solid var(--teal-accent);
+}
+
+/* --- VIEW SECTIONS --- */
+.view-section {
+  display: none;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* --- LAYOUT UTAMA --- */
 .container {
