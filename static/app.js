@@ -188,89 +188,95 @@ function renderUpdateLog(result) {
 
 // --- FITUR TAMBAHAN: PIVOT PREVIEW & DOWNLOAD ---
 async function previewPivot() {
-    const fileInput = document.getElementById("pivotExcel");
-    const sowInput = document.getElementById("pivotSowids").value;
-    
-    if (fileInput.files.length === 0 || !sowInput.trim()) {
-        alert("File Excel sama SOW ID wajib diisi bos!"); return;
-    }
-    
-    const formData = new FormData();
-    for (let i = 0; i < fileInput.files.length; i++) {
-        formData.append("files", fileInput.files[i]);
-    }
-    formData.append("sowids", sowInput);
-    
-    const btn = document.getElementById("btnPreview");
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-    
-    try {
-        const response = await fetch("/api/preview-pivot", { method: "POST", body: formData });
-        const result = await response.json();
-        
-        if (!response.ok) throw new Error(result.error);
-        
-        // Render tabel HTML pakai data JSON dari Flask
-        let tableHtml = `<thead><tr>`;
-        result.columns.forEach(col => {
-            tableHtml += `<th>${col.replace(" Date", "")}</th>`;
-        });
-        tableHtml += `</tr></thead><tbody>`;
-        
-        result.data.forEach(row => {
-            tableHtml += `<tr>`;
-            result.columns.forEach((col, index) => {
-                let val = row[col];
-                // Styling biar kece, kalau Project SOW ID di-bold, Done dikasih dot ijo
-                if (index === 0) {
-                    tableHtml += `<td class="sticky-col">${val}</td>`;
-                } else if (val === "Done") {
-                    tableHtml += `<td class="dot-cell"><span class="dot filled">●</span></td>`;
-                } else {
-                    tableHtml += `<td class="dot-cell"><span class="dot empty">○</span></td>`;
-                }
-            });
-            tableHtml += `</tr>`;
-        });
-        tableHtml += `</tbody>`;
-        
-        document.getElementById("pivotTableResult").innerHTML = tableHtml;
-        document.getElementById("pivotPreviewContainer").style.display = "block";
-        
-    } catch (error) {
-        alert("Waduh error: " + error.message);
-        document.getElementById("pivotPreviewContainer").style.display = "none";
-    } finally {
-        btn.innerHTML = '<i class="fas fa-table"></i> Generate Preview';
-    }
+  const fileInput = document.getElementById("pivotExcel");
+  const sowInput = document.getElementById("pivotSowids").value;
+
+  if (fileInput.files.length === 0 || !sowInput.trim()) {
+    alert("File Excel sama SOW ID wajib diisi bos!");
+    return;
+  }
+
+  const formData = new FormData();
+  for (let i = 0; i < fileInput.files.length; i++) {
+    formData.append("files", fileInput.files[i]);
+  }
+  formData.append("sowids", sowInput);
+
+  const btn = document.getElementById("btnPreview");
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+
+  try {
+    const response = await fetch("/api/preview-pivot", {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json();
+
+    if (!response.ok) throw new Error(result.error);
+
+    // Render tabel HTML pakai data JSON dari Flask
+    let tableHtml = `<thead><tr>`;
+    result.columns.forEach((col) => {
+      tableHtml += `<th>${col.replace(" Date", "")}</th>`;
+    });
+    tableHtml += `</tr></thead><tbody>`;
+
+    result.data.forEach((row) => {
+      tableHtml += `<tr>`;
+      result.columns.forEach((col, index) => {
+        let val = row[col];
+        // Styling biar kece, kalau Project SOW ID di-bold, Done dikasih dot ijo
+        if (index === 0) {
+          tableHtml += `<td class="sticky-col">${val}</td>`;
+        } else if (val === "Done") {
+          tableHtml += `<td class="dot-cell"><span class="dot filled">●</span></td>`;
+        } else {
+          tableHtml += `<td class="dot-cell"><span class="dot empty">○</span></td>`;
+        }
+      });
+      tableHtml += `</tr>`;
+    });
+    tableHtml += `</tbody>`;
+
+    document.getElementById("pivotTableResult").innerHTML = tableHtml;
+    document.getElementById("pivotPreviewContainer").style.display = "block";
+  } catch (error) {
+    alert("Waduh error: " + error.message);
+    document.getElementById("pivotPreviewContainer").style.display = "none";
+  } finally {
+    btn.innerHTML = '<i class="fas fa-table"></i> Generate Preview';
+  }
 }
 
 async function downloadPivot() {
-    const fileInput = document.getElementById("pivotExcel");
-    const sowInput = document.getElementById("pivotSowids").value;
-    
-    const formData = new FormData();
-    for (let i = 0; i < fileInput.files.length; i++) {
-        formData.append("files", fileInput.files[i]);
+  const fileInput = document.getElementById("pivotExcel");
+  const sowInput = document.getElementById("pivotSowids").value;
+
+  const formData = new FormData();
+  for (let i = 0; i < fileInput.files.length; i++) {
+    formData.append("files", fileInput.files[i]);
+  }
+  formData.append("sowids", sowInput);
+
+  try {
+    const response = await fetch("/api/download-pivot", {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error);
     }
-    formData.append("sowids", sowInput);
-    
-    try {
-        const response = await fetch("/api/download-pivot", { method: "POST", body: formData });
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error);
-        }
-        
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "Report_IOMS_Pivot.xlsx";
-        a.click();
-    } catch (error) {
-        alert("Gagal download pivot: " + error.message);
-    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Report_IOMS_Pivot.xlsx";
+    a.click();
+  } catch (error) {
+    alert("Gagal download pivot: " + error.message);
+  }
 }
 
 async function compressPdf() {
@@ -289,7 +295,7 @@ async function compressPdf() {
   formData.append("quality", quality);
 
   const btn = document.getElementById("btnCompress");
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lagi dipress...';
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Compressing...';
   btn.disabled = true;
 
   try {
@@ -303,15 +309,18 @@ async function compressPdf() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download =
-      fileInput.files.length > 1
-        ? "Hasil_Compress_Bulk.zip"
-        : "compressed_file.pdf";
+    if (fileInput.files.length > 1) {
+      a.download = "Hasil_Compress_Bulk.zip";
+    } else {
+      // Ambil nama file aslinya, terus selipin '_compressed' sebelum '.pdf'
+      const oriName = fileInput.files[0].name;
+      a.download = oriName.replace(/\.pdf$/i, "_compressed.pdf");
+    }
     a.click();
   } catch (error) {
     alert("Gagal compress: " + error.message);
   } finally {
-    btn.innerHTML = "🗜️ Gas Compress";
+    btn.innerHTML = "Compress";
     btn.disabled = false;
   }
 }
