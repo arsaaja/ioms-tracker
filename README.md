@@ -27,3 +27,10 @@ venv\Scripts\activate
 # 3. Menginstal dependensi sistem dan mengeksekusi aplikasi
 pip install -r requirements.txt
 python app.py
+
+### Prasyarat Tambahan (Khusus Fitur PDF Compressor)
+Sistem ini menggunakan Ghostscript sebagai *engine* kompresi PDF yang berjalan secara *offline* untuk menjaga keamanan data. Anda wajib menginstalnya di level sistem operasi:
+
+1. Unduh **Ghostscript AGPL Release (64-bit)** dari [situs resminya](https://ghostscript.com/releases/gsdnld.html).
+2. Lakukan instalasi standar (*Next-Next*).
+3. **PENTING:** Tambahkan *path* instalasi direktori `bin` Ghostscript (contoh: `C:\Program Files\gs\gs10.02.1\bin`) ke dalam **System Environment Variables (PATH)** Windows Anda agar perintah `gswin64c` dapat dikenali oleh terminal.
