@@ -86,6 +86,20 @@
               Proses Data
             </button>
           </div>
+
+          <div class="panel card">
+            <h2><i class="fas fa-users"></i> Update Data Mitra</h2>
+            <p>
+              Upload excel mentahan (kolom PO No/CID/Mitra dll). Sistem otomatis
+              ambil <strong>Project SOW ID</strong> dan
+              <strong>MITRA ACTUAL</strong> (fallback ke
+              <strong>old Mitra</strong> kalau kosong).
+            </p>
+            <input type="file" id="mitraFile" accept=".xlsx, .xls" />
+            <button onclick="uploadMitra()" class="btn-secondary">
+              Proses Data Mitra
+            </button>
+          </div>
         </div>
 
         <div id="updateLog" class="log-container" style="display: none">
@@ -99,29 +113,55 @@
       <!-- HALAMAN 2: PIVOT GENERATOR                 -->
       <!-- ========================================== -->
       <div id="view-pivot" class="view-section">
-        <div class="panel card" style="max-width: 900px; margin: 0 auto;">
+        <div class="panel card" style="max-width: 900px; margin: 0 auto">
           <h2><i class="fas fa-file-excel"></i> Generate Pivot IOMS</h2>
-          <hr>
+          <hr />
           <label>Upload Excel Mentahan (Bisa Bulk):</label>
           <input type="file" id="pivotExcel" accept=".xlsx, .xls" multiple />
-          
+
           <label>Paste List SOW ID (Bisa Koma / Enter):</label>
-          <textarea id="pivotSowids" rows="4" placeholder="SOW-01, SOW-02..."></textarea>
-          
-          <button id="btnPreview" onclick="previewPivot()" class="btn-primary" style="width: 100%;">
+          <textarea
+            id="pivotSowids"
+            rows="4"
+            placeholder="SOW-01, SOW-02..."
+          ></textarea>
+
+          <button
+            id="btnPreview"
+            onclick="previewPivot()"
+            class="btn-primary"
+            style="width: 100%"
+          >
             <i class="fas fa-table"></i> Generate Preview
           </button>
 
           <!-- Tempat nongolnya tabel preview -->
-          <div id="pivotPreviewContainer" style="display: none; margin-top: 25px;">
-            <h3 style="margin-bottom: 10px; color: var(--teal-accent);"><i class="fas fa-eye"></i> Preview Data</h3>
-            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+          <div
+            id="pivotPreviewContainer"
+            style="display: none; margin-top: 25px"
+          >
+            <h3 style="margin-bottom: 10px; color: var(--teal-accent)">
+              <i class="fas fa-eye"></i> Preview Data
+            </h3>
+            <div
+              class="table-responsive"
+              style="max-height: 400px; overflow-y: auto"
+            >
               <table class="milestone-table" id="pivotTableResult">
                 <!-- Tabel di-inject via JS di sini -->
               </table>
             </div>
-            
-            <button onclick="downloadPivot()" class="btn-secondary" style="width: 100%; margin-top: 20px; border-color: #2ea043; color: #2ea043;">
+
+            <button
+              onclick="downloadPivot()"
+              class="btn-secondary"
+              style="
+                width: 100%;
+                margin-top: 20px;
+                border-color: #2ea043;
+                color: #2ea043;
+              "
+            >
               <i class="fas fa-download"></i> Download Hasil Excel
             </button>
           </div>

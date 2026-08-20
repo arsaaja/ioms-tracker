@@ -66,7 +66,10 @@ function renderSearchResults(result, container) {
   }
 
   if (result.total_found > 0) {
-    html += `<div class="table-responsive"><table class="milestone-table">
+    html += `<div class="tracker-row">`;
+
+    // Tabel utama: SOW ID + grid milestone
+    html += `<div class="table-responsive milestone-table-wrap"><table class="milestone-table">
             <thead>
                 <tr>
                     <th>SOW ID</th>
@@ -93,9 +96,52 @@ function renderSearchResults(result, container) {
     });
 
     html += `</tbody></table></div>`;
+
+    // Tabel kecil di sebelahnya: khusus kolom Mitra, baris sejajar dengan tabel utama
+    html += `<div class="table-responsive mitra-table-wrap"><table class="milestone-table mitra-table">
+            <thead><tr><th>Mitra</th></tr></thead>
+            <tbody>`;
+
+    result.data.forEach((item) => {
+      const mitraVal = item.mitra;
+      if (mitraVal) {
+        html += `<tr><td class="mitra-cell">${mitraVal}</td></tr>`;
+      } else {
+        html += `<tr><td class="mitra-cell mitra-empty">-</td></tr>`;
+      }
+    });
+
+    html += `</tbody></table></div>`;
+    html += `</div>`; // .tracker-row
   }
 
   container.innerHTML = html;
+}
+
+// --- FITUR UPLOAD DATA MITRA ---
+async function uploadMitra() {
+  const fileInput = document.getElementById("mitraFile");
+  if (fileInput.files.length === 0) {
+    alert("Pilih file excel Mitra terlebih dahulu!");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+
+  showLogContainer("Memproses data Mitra...");
+
+  try {
+    const response = await fetch("/api/upload_mitra", {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json();
+    renderUpdateLog(result);
+  } catch (error) {
+    document.getElementById("summaryStats").innerHTML =
+      `<p class="error"><i class="fas fa-times-circle"></i> Error upload Mitra: ${error}</p>`;
+  }
 }
 
 // --- FITUR UPDATE & UPSERT ---
@@ -172,7 +218,16 @@ function renderUpdateLog(result) {
 
   const s = result.summary;
 
+  let detectedInfo = "";
+  if (s.detected_columns) {
+    detectedInfo = `<p style="color:#8b949e; font-size:0.85rem;">
+        <i class="fas fa-info-circle"></i> Kolom terdeteksi — SOW ID: <strong>${s.detected_columns.sow_id}</strong>,
+        Mitra: <strong>${s.detected_columns.mitra_actual || s.detected_columns.old_mitra || "-"}</strong>
+      </p>`;
+  }
+
   document.getElementById("summaryStats").innerHTML = `
+        ${detectedInfo}
         <p>
             <i class="fas fa-check-circle" style="color: #2ea043;"></i> <strong>Insert baru:</strong> ${s.inserted} | 
             <i class="fas fa-sync-alt" style="color: #3b82f6;"></i> <strong>Update milestone:</strong> ${s.updated} | 

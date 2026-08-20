@@ -42,6 +42,14 @@ def init_db():
             FOREIGN KEY(project_sow_id) REFERENCES PROJECT_SOW(project_sow_id)
         )
     ''')
+
+    # Tabel Mitra (dari file excel terpisah: kolom Project SOW ID + MITRA ACTUAL)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS MITRA_DATA (
+            project_sow_id TEXT PRIMARY KEY,
+            mitra TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -117,6 +125,74 @@ def upsert_sow_data(data_list):
     conn.close()
     return summary, logs
 
+def find_column(df_columns, candidates):
+    """
+    Cari nama kolom asli di df_columns yang cocok (case-insensitive, spasi
+    diabaikan) dengan salah satu nama di `candidates` (urutan = prioritas).
+    Return nama kolom asli kalau ketemu, None kalau tidak ada.
+    """
+    lookup = {str(c).strip().lower(): c for c in df_columns}
+    for cand in candidates:
+        key = cand.strip().lower()
+        if key in lookup:
+            return lookup[key]
+    return None
+
+
+def upsert_mitra_data(data_list, sow_col, mitra_actual_col, old_mitra_col):
+    """
+    Upsert khusus kolom Mitra dari file excel yang punya struktur kolom beda
+    (Project SOW ID, ..., old Mitra, MITRA ACTUAL, ...).
+    Prioritas ambil dari kolom MITRA ACTUAL, fallback ke old Mitra kalau kosong.
+    Selalu ditimpa ke nilai terbaru (bukan cuma isi-kalau-kosong), karena
+    mitra pelaksana bisa berganti dari waktu ke waktu.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    summary = {'inserted': 0, 'updated': 0, 'unchanged': 0}
+    logs = []
+    skipped_no_id = 0
+    skipped_no_mitra = 0
+
+    for row in data_list:
+        sow_id = row.get(sow_col)
+        if not sow_id or pd.isna(sow_id) or str(sow_id).strip() == '':
+            skipped_no_id += 1
+            continue
+        sow_id = str(sow_id).strip()
+
+        mitra_val = row.get(mitra_actual_col) if mitra_actual_col else None
+        if mitra_val is None or pd.isna(mitra_val) or str(mitra_val).strip() == '':
+            mitra_val = row.get(old_mitra_col) if old_mitra_col else None
+        if mitra_val is None or pd.isna(mitra_val) or str(mitra_val).strip() == '':
+            skipped_no_mitra += 1
+            continue
+        mitra_val = str(mitra_val).strip()
+
+        cursor.execute("SELECT mitra FROM MITRA_DATA WHERE project_sow_id = ?", (sow_id,))
+        existing = cursor.fetchone()
+
+        if not existing:
+            cursor.execute("INSERT INTO MITRA_DATA (project_sow_id, mitra) VALUES (?, ?)", (sow_id, mitra_val))
+            summary['inserted'] += 1
+            logs.append(f"[{sow_id}] Menambahkan Mitra: {mitra_val}")
+        elif existing[0] != mitra_val:
+            cursor.execute("UPDATE MITRA_DATA SET mitra = ? WHERE project_sow_id = ?", (mitra_val, sow_id))
+            summary['updated'] += 1
+            logs.append(f"[{sow_id}] Mitra berubah: ({existing[0] or '-'}) -> {mitra_val}")
+        else:
+            summary['unchanged'] += 1
+
+    conn.commit()
+    conn.close()
+
+    if skipped_no_id or skipped_no_mitra:
+        logs.append(f"[INFO] Dilewati: {skipped_no_id} baris tanpa SOW ID, {skipped_no_mitra} baris tanpa nilai Mitra.")
+
+    return summary, logs
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -166,7 +242,16 @@ def bulk_search():
         placeholders = ','.join(['?'] * len(chunk))
         cursor.execute(f"SELECT project_sow_id FROM PROJECT_SOW WHERE project_sow_id IN ({placeholders})", chunk)
         valid_ids.extend([row['project_sow_id'] for row in cursor.fetchall()])
-        
+
+    # Ambil data Mitra (dari tabel terpisah MITRA_DATA) untuk SOW ID yang dicari
+    mitra_map = {}
+    for i in range(0, len(sow_ids), chunk_size):
+        chunk = sow_ids[i:i + chunk_size]
+        placeholders = ','.join(['?'] * len(chunk))
+        cursor.execute(f"SELECT project_sow_id, mitra FROM MITRA_DATA WHERE project_sow_id IN ({placeholders})", chunk)
+        for row in cursor.fetchall():
+            mitra_map[row['project_sow_id']] = row['mitra']
+
     conn.close()
 
     # Pisahkan hasil yang ketemu dan tidak ketemu
@@ -175,7 +260,8 @@ def bulk_search():
         if k in valid_ids:
             found_list.append({
                 'sow_id': k,
-                'milestones': grouped_results[k]
+                'milestones': grouped_results[k],
+                'mitra': mitra_map.get(k, '')
             })
             
     not_found = [k for k in sow_ids if k not in valid_ids]
@@ -188,6 +274,108 @@ def bulk_search():
         'not_found_list': not_found,
         'milestones': MILESTONES
     })
+
+@app.route('/api/upload_mitra', methods=['POST'])
+def upload_mitra():
+    if 'file' not in request.files:
+        return jsonify({'error': 'Tidak ada file yang diunggah'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Nama file kosong'}), 400
+
+    try:
+        # 1. Baca keseluruhan struktur file Excel
+        xl = pd.ExcelFile(file)
+        df = None
+        header_idx = -1
+        target_sheet = ""
+        
+        # 2. Cari sheet yang bernama 'site list all' (case-insensitive)
+        sheet_to_process = None
+        for sheet in xl.sheet_names:
+            if sheet.strip().lower() == 'site list all':
+                sheet_to_process = sheet
+                break
+        
+        # Jika sheet spesifik ketemu, fokus ke sana. Jika tidak, jadikan semua sheet sebagai cadangan.
+        sheets_to_scan = [sheet_to_process] if sheet_to_process else xl.sheet_names
+
+        # 3. Loop ke sheet yang sudah ditentukan dan cari baris header
+        for sheet in sheets_to_scan:
+            temp_df = xl.parse(sheet, header=None)
+            
+            # Scan maksimal 30 baris pertama untuk mencari keberadaan teks SOW
+            for i in range(min(30, len(temp_df))):
+                row_str = " ".join([str(x).lower() for x in temp_df.iloc[i].tolist()])
+                
+                if 'sow' in row_str and ('project' in row_str or 'id' in row_str):
+                    df = temp_df
+                    header_idx = i
+                    target_sheet = sheet
+                    break
+                    
+            if df is not None:
+                break
+                
+        # 4. Validasi jika benar-benar tidak ada yang cocok
+        if header_idx == -1:
+            return jsonify({
+                'error': f"Gagal deteksi header SOW ID. Pastikan sheet 'site list all' ada di dalam file tersebut."
+            }), 400
+
+        # 5. Timpa nama kolom dengan baris yang berhasil ditemukan
+        raw_columns = df.iloc[header_idx].tolist()
+        cleaned_columns = []
+        for col_idx, c in enumerate(raw_columns):
+            if pd.isna(c) or str(c).strip() == '' or str(c).strip().lower() == 'nan':
+                cleaned_columns.append(f"Unnamed_{col_idx}")
+            else:
+                # Ganti Alt+Enter jadi spasi biasa
+                c_str = str(c).replace('\n', ' ').replace('\r', '').strip()
+                cleaned_columns.append(c_str)
+                
+        df.columns = cleaned_columns
+        
+        # 6. Potong baris header dan baris-baris kosong di atasnya
+        df = df.iloc[header_idx + 1:].reset_index(drop=True)
+        
+        # 7. Cari kolom pakai fungsi find_column yang sudah ada
+        sow_candidates = ['Project SOW ID', 'SOW ID', 'SOWID', 'SOW No']
+        mitra_candidates = ['MITRA ACTUAL', 'Mitra Actual', 'Mitra']
+        old_mitra_candidates = ['old Mitra', 'Old Mitra']
+        
+        sow_col = find_column(df.columns, sow_candidates)
+        mitra_actual_col = find_column(df.columns, mitra_candidates)
+        old_mitra_col = find_column(df.columns, old_mitra_candidates)
+        
+        # 8. Validasi kolom akhir
+        if not sow_col:
+            detected = ", ".join(df.columns.tolist())
+            return jsonify({
+                'error': f"Header ketemu di Sheet '{target_sheet}' Baris {header_idx + 1}, tapi SOW ID beda nama. Terdeteksi: {detected}"
+            }), 400
+            
+        if not mitra_actual_col and not old_mitra_col:
+            detected = ", ".join(df.columns.tolist())
+            return jsonify({
+                'error': f"Header ketemu di Sheet '{target_sheet}' Baris {header_idx + 1}, tapi Mitra tidak ada. Terdeteksi: {detected}"
+            }), 400
+
+        # 9. Eksekusi Upsert
+        data_list = df.to_dict('records')
+        summary, logs = upsert_mitra_data(data_list, sow_col, mitra_actual_col, old_mitra_col)
+        
+        summary['detected_columns'] = {
+            'sow_id': sow_col,
+            'mitra_actual': mitra_actual_col,
+            'old_mitra': old_mitra_col
+        }
+        
+        return jsonify({'summary': summary, 'logs': logs})
+
+    except Exception as e:
+        return jsonify({'error': f"Sistem error: {str(e)}"}), 500
 
 @app.route('/api/upload_excel', methods=['POST'])
 def upload_excel():
