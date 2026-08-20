@@ -66,14 +66,13 @@ function renderSearchResults(result, container) {
   }
 
   if (result.total_found > 0) {
-    html += `<div class="tracker-row">`;
-
-    // Tabel utama: SOW ID + grid milestone
-    html += `<div class="table-responsive milestone-table-wrap"><table class="milestone-table">
+    html += `<div class="table-responsive"><table class="milestone-table">
             <thead>
                 <tr>
                     <th>SOW ID</th>
                     ${result.milestones.map((m) => `<th>${m.replace(" Date", "")}</th>`).join("")}
+                    <!-- TAMBAHAN: Header Mitra langsung masuk sini -->
+                    <th>Mitra</th> 
                 </tr>
             </thead>
             <tbody>`;
@@ -81,6 +80,9 @@ function renderSearchResults(result, container) {
     result.data.forEach((item) => {
       const sowId = item.sow_id;
       const mData = item.milestones;
+
+      // Asumsi field dari backend bernama 'mitra' (sesuaikan jika namanya beda)
+      const mitraName = item.mitra ? item.mitra : "-";
 
       html += `<tr><td class="sticky-col">${sowId}</td>`;
 
@@ -92,27 +94,14 @@ function renderSearchResults(result, container) {
           html += `<td class="dot-cell"><span class="dot empty" title="Belum update">○</span></td>`;
         }
       });
+
+      // TAMBAHAN: Data Mitra diletakkan sebagai kolom terakhir di baris yang sama
+      html += `<td style="font-weight: 500; text-align: center;">${mitraName}</td>`;
+
       html += `</tr>`;
     });
 
     html += `</tbody></table></div>`;
-
-    // Tabel kecil di sebelahnya: khusus kolom Mitra, baris sejajar dengan tabel utama
-    html += `<div class="table-responsive mitra-table-wrap"><table class="milestone-table mitra-table">
-            <thead><tr><th>Mitra</th></tr></thead>
-            <tbody>`;
-
-    result.data.forEach((item) => {
-      const mitraVal = item.mitra;
-      if (mitraVal) {
-        html += `<tr><td class="mitra-cell">${mitraVal}</td></tr>`;
-      } else {
-        html += `<tr><td class="mitra-cell mitra-empty">-</td></tr>`;
-      }
-    });
-
-    html += `</tbody></table></div>`;
-    html += `</div>`; // .tracker-row
   }
 
   container.innerHTML = html;
