@@ -159,35 +159,6 @@ async function uploadExcel() {
   }
 }
 
-async function submitManualInput() {
-  const textData = document.getElementById("manualInput").value;
-  if (!textData.trim()) {
-    alert("Paste data dari excel terlebih dahulu!");
-    return;
-  }
-
-  showLogContainer("Memproses teks input...");
-
-  try {
-    const response = await fetch("/api/input_manual", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text_data: textData }),
-    });
-    const result = await response.json();
-
-    if (!response.ok) {
-      document.getElementById("summaryStats").innerHTML =
-        `<p class="error"><i class="fas fa-exclamation-circle"></i> ${result.error}</p>`;
-      return;
-    }
-
-    renderUpdateLog(result);
-  } catch (error) {
-    document.getElementById("summaryStats").innerHTML =
-      `<p class="error"><i class="fas fa-times-circle"></i> Error input manual: ${error}</p>`;
-  }
-}
 
 // --- HELPER UI ---
 function showLogContainer(msg) {

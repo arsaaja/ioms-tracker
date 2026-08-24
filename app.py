@@ -397,33 +397,6 @@ def upload_excel():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/input_manual', methods=['POST'])
-def input_manual():
-    data = request.json
-    raw_text = data.get('text_data', '')
-    
-    # Parsing Tab-Separated Values (TSV) dari copy-paste Excel
-    lines = raw_text.strip().split('\n')
-    if len(lines) < 2:
-        return jsonify({'error': 'Data tidak lengkap. Pastikan Anda meng-copy baris header dan datanya.'}), 400
-        
-    headers = [h.strip() for h in lines[0].split('\t')]
-    
-    data_list = []
-    for line in lines[1:]:
-        values = [v.strip() for v in line.split('\t')]
-        
-        # Pastikan jumlah kolom sama dengan header untuk menghindari index error
-        # Jika kurang, tambahkan string kosong. Jika lebih, potong.
-        while len(values) < len(headers):
-            values.append("")
-        values = values[:len(headers)]
-            
-        row_dict = dict(zip(headers, values))
-        data_list.append(row_dict)
-
-    summary, logs = upsert_sow_data(data_list)
-    return jsonify({'summary': summary, 'logs': logs})
 
 # ==========================================
 # FITUR PIVOT 1: GENERATE PREVIEW (JSON)
