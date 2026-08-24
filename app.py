@@ -494,7 +494,11 @@ def api_compress_pdf():
             output_path = input_path.replace(".pdf", "_compressed.pdf")
             gs_cmd = [
                 "gswin64c", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
-                f"-dPDFSETTINGS={quality}", "-dNOPAUSE", "-dQUIET", "-dBATCH",
+                f"-dPDFSETTINGS={quality}", 
+                "-dColorImageDownsampleThreshold=1.0",
+                "-dGrayImageDownsampleThreshold=1.0",
+                "-dMonoImageDownsampleThreshold=1.0",
+                "-dNOPAUSE", "-dQUIET", "-dBATCH",
                 f"-sOutputFile={output_path}", input_path
             ]
             subprocess.run(gs_cmd, check=True)
@@ -511,7 +515,11 @@ def api_compress_pdf():
                     output_path = input_path.replace(".pdf", "_compressed.pdf")
                     gs_cmd = [
                         "gswin64c", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
-                        f"-dPDFSETTINGS={quality}", "-dNOPAUSE", "-dQUIET", "-dBATCH",
+                        f"-dPDFSETTINGS={quality}", 
+                        "-dColorImageDownsampleThreshold=1.0",
+                        "-dGrayImageDownsampleThreshold=1.0",
+                        "-dMonoImageDownsampleThreshold=1.0",
+                        "-dNOPAUSE", "-dQUIET", "-dBATCH",
                         f"-sOutputFile={output_path}", input_path
                     ]
                     subprocess.run(gs_cmd, check=True)
