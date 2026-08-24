@@ -379,109 +379,107 @@ def upload_mitra():
 
 @app.route('/api/upload_excel', methods=['POST'])
 def upload_excel():
-    if 'file' not in request.files:
+    if 'files' not in request.files:
         return jsonify({'error': 'Tidak ada file yang diunggah'}), 400
     
-    file = request.files['file']
-    if file.filename == '':
+    files = request.files.getlist('files')
+    if not files or files[0].filename == '':
         return jsonify({'error': 'Nama file kosong'}), 400
 
     try:
-        # Baca Excel dengan Pandas
-        df = pd.read_excel(file)
+        total_summary = {'inserted': 0, 'updated': 0, 'unchanged': 0}
+        all_logs = []
+        
+        for file in files:
+            # Baca Excel dengan Pandas
+            df = pd.read_excel(file)
+                
+            # Konversi dataframe ke list of dictionaries (untuk dikirim ke upsert logic)
+            data_list = df.to_dict('records')
+            summary, logs = upsert_sow_data(data_list)
             
-        # Konversi dataframe ke list of dictionaries (untuk dikirim ke upsert logic)
-        data_list = df.to_dict('records')
-        summary, logs = upsert_sow_data(data_list)
-        return jsonify({'summary': summary, 'logs': logs})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-# ==========================================
-# FITUR PIVOT 1: GENERATE PREVIEW (JSON)
-# ==========================================
-@app.route('/api/preview-pivot', methods=['POST'])
-def api_preview_pivot():
-    if 'files' not in request.files:
-        return jsonify({'error': 'Mana file Excelnya?'}), 400
-    
-    files = request.files.getlist('files')
-    sowid_input = request.form.get('sowids', '')
-    
-    try:
-        df_list = [pd.read_excel(file) for file in files]
-        df_all = pd.concat(df_list, ignore_index=True)
-        sowid_list = [x.strip() for x in sowid_input.replace('\n', ',').split(',') if x.strip()]
-        df_target = df_all[df_all['Project SOW ID'].isin(sowid_list)].copy()
-        
-        if df_target.empty:
-            return jsonify({'error': 'SOWID lu kagak nemu di file Excel mana pun.'}), 404
+            total_summary['inserted'] += summary['inserted']
+            total_summary['updated'] += summary['updated']
+            total_summary['unchanged'] += summary['unchanged']
+            all_logs.extend(logs)
             
-        milestones = ['MOS Date', 'INSTALL Date', 'CONNECTED Date', 'OA Date', 'QC Date', 'BAUTEQP Date', 'BASOEQP Date', 'BAPAEQP Date', 'SOAC Date', 'BAST Date', 'ATP']
-        report_data = []
-        for _, row in df_target.iterrows():
-            for col in milestones:
-                if col in df_target.columns:
-                    status = "Done" if pd.notna(row[col]) else "Pending"
-                    report_data.append({"Project SOW ID": row['Project SOW ID'], "Milestone": col, "Status": status})
-                    
-        # Bikin pivot dan reset_index biar SOW ID jadi kolom biasa (gampang di-JSON-in)
-        pivot_report = pd.DataFrame(report_data).pivot_table(index="Project SOW ID", columns="Milestone", values="Status", aggfunc='first').reset_index()
-        
-        # Rapihin urutan kolom
-        available_cols = ["Project SOW ID"] + [c for c in milestones if c in pivot_report.columns]
-        pivot_report = pivot_report[available_cols].fillna("Pending")
-        
-        # Balikin data berupa JSON buat di-render Frontend
-        return jsonify({
-            "columns": available_cols,
-            "data": pivot_report.to_dict(orient="records")
-        })
+        return jsonify({'summary': total_summary, 'logs': all_logs})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ==========================================
-# FITUR PIVOT 2: DOWNLOAD EXCEL
-# ==========================================
-@app.route('/api/download-pivot', methods=['POST'])
-def api_download_pivot():
-    # Sama kayak preview, tapi outputnya dilempar ke tempfile Excel
-    files = request.files.getlist('files')
-    sowid_input = request.form.get('sowids', '')
+
+@app.route('/api/download_tracker_excel', methods=['POST'])
+def download_tracker_excel():
+    data = request.json if request.is_json else request.form
+    raw_sow_ids = data.get('sow_ids', '')
     
-    try:
-        df_list = [pd.read_excel(file) for file in files]
-        df_all = pd.concat(df_list, ignore_index=True)
-        sowid_list = [x.strip() for x in sowid_input.replace('\n', ',').split(',') if x.strip()]
-        df_target = df_all[df_all['Project SOW ID'].isin(sowid_list)].copy()
+    raw_list = [s.strip() for s in re.split(r'[,\n\t]+', raw_sow_ids) if s.strip()]
+    sow_ids = list(dict.fromkeys(raw_list))
+    
+    if not sow_ids:
+        return jsonify({'error': 'Tidak ada SOW ID yang valid.'}), 400
+
+    grouped_results = {sow_id: {m: None for m in MILESTONES} for sow_id in sow_ids}
+    
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    chunk_size = 500 
+    for i in range(0, len(sow_ids), chunk_size):
+        chunk = sow_ids[i:i + chunk_size]
+        placeholders = ','.join(['?'] * len(chunk))
         
-        milestones = ['MOS Date', 'INSTALL Date', 'CONNECTED Date', 'OA Date', 'QC Date', 'BAUTEQP Date', 'BASOEQP Date', 'BAPAEQP Date', 'SOAC Date', 'BAST Date', 'ATP']
-        report_data = []
-        for _, row in df_target.iterrows():
-            for col in milestones:
-                if col in df_target.columns:
-                    status = "Done" if pd.notna(row[col]) else "Pending"
-                    report_data.append({"Project SOW ID": row['Project SOW ID'], "Milestone": col, "Status": status})
-                    
-        pivot_report = pd.DataFrame(report_data).pivot_table(index="Project SOW ID", columns="Milestone", values="Status", aggfunc='first')
-        available_cols = [c for c in milestones if c in pivot_report.columns]
-        pivot_report = pivot_report[available_cols]
-        
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-        pivot_report.to_excel(temp_file.name)
-        temp_file.close()
-        
-        return send_file(temp_file.name, as_attachment=True, download_name="Report_IOMS_Pivot.xlsx")
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        cursor.execute(f"SELECT project_sow_id, milestone_type, milestone_date FROM MILESTONE_DATE WHERE project_sow_id IN ({placeholders})", chunk)
+        for row in cursor.fetchall():
+            grouped_results[row['project_sow_id']][row['milestone_type']] = row['milestone_date']
+            
+    valid_ids = []
+    for i in range(0, len(sow_ids), chunk_size):
+        chunk = sow_ids[i:i + chunk_size]
+        placeholders = ','.join(['?'] * len(chunk))
+        cursor.execute(f"SELECT project_sow_id FROM PROJECT_SOW WHERE project_sow_id IN ({placeholders})", chunk)
+        valid_ids.extend([row['project_sow_id'] for row in cursor.fetchall()])
+
+    mitra_map = {}
+    for i in range(0, len(sow_ids), chunk_size):
+        chunk = sow_ids[i:i + chunk_size]
+        placeholders = ','.join(['?'] * len(chunk))
+        cursor.execute(f"SELECT project_sow_id, mitra FROM MITRA_DATA WHERE project_sow_id IN ({placeholders})", chunk)
+        for row in cursor.fetchall():
+            mitra_map[row['project_sow_id']] = row['mitra']
+
+    conn.close()
+
+    report_data = []
+    for k in sow_ids:
+        if k in valid_ids:
+            row_data = {"Project SOW ID": k}
+            for m in MILESTONES:
+                val = grouped_results[k][m]
+                row_data[m] = "Done" if (val and val not in ["None", "null"]) else "Pending"
+            row_data["Mitra"] = mitra_map.get(k, "")
+            report_data.append(row_data)
+            
+    if not report_data:
+        return jsonify({'error': 'SOW ID tidak ditemukan di database.'}), 404
+
+    df_report = pd.DataFrame(report_data)
+    cols = ["Project SOW ID"] + MILESTONES + ["Mitra"]
+    df_report = df_report[cols]
+    
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    df_report.to_excel(temp_file.name, index=False)
+    temp_file.close()
+    
+    return send_file(temp_file.name, as_attachment=True, download_name="SOW_Tracker_Report.xlsx")
 # ==========================================
 # FITUR TAMBAHAN: COMPRESS PDF (BULK)
 # ==========================================
 @app.route('/api/compress-pdf', methods=['POST'])
 def api_compress_pdf():
     if 'files' not in request.files:
-        return jsonify({'error': 'Upload PDF-nya dulu bos!'}), 400
+        return jsonify({'error': 'Upload PDF-nya dulu!'}), 400
         
     files = request.files.getlist('files')
     quality = request.form.get('quality', '/ebook')
